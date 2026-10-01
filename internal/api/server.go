@@ -70,6 +70,10 @@ func (s *Server) routes() http.Handler {
 		api.Post("/dosing", NewDoseHandler(s.plant).ServeHTTP)
 		api.Post("/lab/results", s.labResult)
 		api.Post("/emergency/{lineID}", s.emergencyStop)
+		api.Get("/discharge/flow", s.dischargeFlowList)
+		api.Post("/discharge/{lineID}/flow", s.dischargeFlowReport)
+		api.Post("/discharge/{lineID}/flow/reset", s.dischargeFlowReset)
+		api.Post("/discharge/{lineID}/flow/config", s.dischargeFlowConfig)
 	})
 	return router
 }

@@ -23,6 +23,7 @@ type LineStatus struct {
 	Dose          *dosing.Change         `json:"dose,omitempty"`
 	LabResult     *model.LabResult       `json:"lab_result,omitempty"`
 	Permit        *discharge.Permit      `json:"permit,omitempty"`
+	FlowGuard     *discharge.FlowState   `json:"flow_guard,omitempty"`
 	Cycle         *settling.Cycle        `json:"cycle,omitempty"`
 	Handover      *sludge.Handover       `json:"handover,omitempty"`
 	Sequence      *sludge.Sequence       `json:"sequence,omitempty"`
@@ -64,6 +65,10 @@ func (p *Plant) Status(lineID model.LineID) (LineStatus, error) {
 	if !ok {
 		return LineStatus{}, errors.New("process line is not found")
 	}
+	var flowGuard *discharge.FlowState
+	if flowState, err := p.flowGuard.Snapshot(lineID); err == nil {
+		flowGuard = &flowState
+	}
 	settlingState, ok := p.settling[lineID]
 	if !ok {
 		return LineStatus{}, errors.New("settling state is not found")
@@ -86,7 +91,8 @@ func (p *Plant) Status(lineID model.LineID) (LineStatus, error) {
 	}
 	return LineStatus{
 		Line: line, Batch: batch, Intake: admission, Equalizers: p.equalizers.Snapshot(), Dose: dose, LabResult: labResult, Permit: permit,
-		Cycle: cycle, Handover: handover, Sequence: sequence, Settling: settlingState.Snapshot(),
+		FlowGuard: flowGuard,
+		Cycle:     cycle, Handover: handover, Sequence: sequence, Settling: settlingState.Snapshot(),
 		Samples: p.sampler.LineSnapshot(lineID), SampleCursor: p.receiver.Current(lineID),
 		Compensations: p.compensations.Pending(),
 		Pumps:         filterPumps(p.pumps.Snapshot(), lineID), Blowers: p.aeration.Blowers(),

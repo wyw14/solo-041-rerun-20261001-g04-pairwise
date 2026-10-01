@@ -8,6 +8,23 @@
   <div class="grid">
     <section class="panel wide"><h2>处理线</h2><table><thead><tr><th>处理线</th><th>阶段</th><th>代际</th><th>批次</th></tr></thead><tbody id="lines"></tbody></table></section>
     <section class="panel"><h2>接纳进水</h2><form id="start"><label>处理线<select name="line"><option>line-1</option><option>line-2</option><option>line-3</option></select></label><label>流量 m³/h<input name="flow" type="number" value="760" min="1"></label><label>来源<input name="source" value="north-intake"></label><button>创建处理批次</button></form></section>
+    <section class="panel wide"><h2>排水流量联锁</h2>
+      <form id="flow">
+        <label>处理线<select name="line"><option>line-1</option><option>line-2</option><option>line-3</option></select></label>
+        <label>实际流量 m³/h<input name="value" type="number" value="80" min="0" step="0.1"></label>
+        <label>遥测时间(可选)<input name="observed_at" placeholder="RFC3339，留空为当前"></label>
+        <button>上报流量</button>
+        <button type="button" id="flow-reset" class="danger">复位联锁</button>
+      </form>
+      <form id="flow-cfg" style="margin-top:8px">
+        <label>处理线<select name="line"><option>line-1</option><option>line-2</option><option>line-3</option></select></label>
+        <label>流量上限 m³/h<input name="max_flow" type="number" min="0.1" step="0.1"></label>
+        <label>失联超时(s)<input name="contact_timeout_seconds" type="number" min="1"></label>
+        <label>遥测有效期(s)<input name="telemetry_ttl_seconds" type="number" min="1"></label>
+        <button>更新配置</button>
+      </form>
+      <table style="margin-top:8px"><thead><tr><th>处理线</th><th>阀门</th><th>最近流量</th><th>上限</th><th>联锁状态</th><th>保护原因</th></tr></thead><tbody id="flow-lines"></tbody></table>
+    </section>
     <section class="panel wide"><h2>最近操作</h2><pre id="output">等待操作</pre></section>
     <section class="panel"><h2>急停隔离</h2><form id="stop"><label>处理线<select name="line"><option>line-1</option><option>line-2</option><option>line-3</option></select></label><label>原因<input name="reason" value="operator safety check"></label><button class="danger">隔离处理线</button></form></section>
   </div>
@@ -15,5 +32,10 @@
 <script src="/assets/common.js"></script><script>
 async function loadLines(){const data=await request('/api/process-lines');document.querySelector('#lines').innerHTML=data.lines.map(x=>`<tr><td>${x.line_id}</td><td>${x.stage}</td><td>${x.generation}</td><td>${x.batch_id||'-'}</td></tr>`).join('')}
 document.querySelector('#start').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target);try{show(await request(`/api/process-lines/${f.get('line')}/batches`,{method:'POST',body:JSON.stringify({flow_m3_hour:Number(f.get('flow')),source:f.get('source')})}));loadLines()}catch(err){showError(err)}});
-document.querySelector('#stop').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target);try{show(await request(`/api/emergency/${f.get('line')}`,{method:'POST',body:JSON.stringify({reason:f.get('reason')})}));loadLines()}catch(err){showError(err)}});loadLines().catch(showError);
+document.querySelector('#stop').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target);try{show(await request(`/api/emergency/${f.get('line')}`,{method:'POST',body:JSON.stringify({reason:f.get('reason')})}));loadLines()}catch(err){showError(err)}});
+async function loadFlow(){const data=await request('/api/discharge/flow');document.querySelector('#flow-lines').innerHTML=data.lines.map(l=>{const f=l.latest_flow;return `<tr><td>${l.line_id}</td><td>${l.valve_open?'开':'关'}</td><td>${f?f.value.toFixed(1):'-'}</td><td>${l.config.max_flow}</td><td>${l.tripped?'跳闸闭锁':'正常监视'}</td><td>${l.trip?l.trip.reason:'-'}</td></tr>`}).join('')}
+document.querySelector('#flow').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target);const body={value:Number(f.get('value'))};if(f.get('observed_at'))body.observed_at=f.get('observed_at');try{show(await request(`/api/discharge/${f.get('line')}/flow`,{method:'POST',body:JSON.stringify(body)}));loadFlow()}catch(err){showError(err)}});
+document.querySelector('#flow-reset').addEventListener('click',async ()=>{const f=new FormData(document.querySelector('#flow'));try{show(await request(`/api/discharge/${f.get('line')}/flow/reset`,{method:'POST'}));loadFlow()}catch(err){showError(err)}});
+document.querySelector('#flow-cfg').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target);const body={};if(f.get('max_flow'))body.max_flow=Number(f.get('max_flow'));if(f.get('contact_timeout_seconds'))body.contact_timeout_seconds=Number(f.get('contact_timeout_seconds'));if(f.get('telemetry_ttl_seconds'))body.telemetry_ttl_seconds=Number(f.get('telemetry_ttl_seconds'));try{show(await request(`/api/discharge/${f.get('line')}/flow/config`,{method:'POST',body:JSON.stringify(body)}));loadFlow()}catch(err){showError(err)}});
+loadLines().catch(showError);loadFlow().catch(showError);setInterval(()=>loadFlow().catch(()=>{}),3000);
 </script></body></html>

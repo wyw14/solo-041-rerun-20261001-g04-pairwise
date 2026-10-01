@@ -38,6 +38,7 @@ type Plant struct {
 	labResults    *lab.Results
 	permits       *discharge.PermitBook
 	valves        *discharge.ValveController
+	flowGuard     *discharge.FlowInterlock
 	alarms        *alarm.Service
 	settling      map[model.LineID]*settling.State
 	cycles        *settling.CycleBook
@@ -52,7 +53,7 @@ type Plant struct {
 	receiver      *sensor.Receiver
 }
 
-func NewPlant(dataDir string, lines []model.LineID, now func() time.Time) (*Plant, error) {
+func NewPlant(dataDir string, lines []model.LineID, now func() time.Time, flowConfig discharge.FlowConfig) (*Plant, error) {
 	if dataDir == "" || len(lines) == 0 || now == nil {
 		return nil, errors.New("plant data directory, lines and clock are required")
 	}
@@ -116,6 +117,19 @@ func NewPlant(dataDir string, lines []model.LineID, now func() time.Time) (*Plan
 	if err != nil {
 		return nil, err
 	}
+	alarmService := alarm.NewService()
+	flowGuard, err := discharge.NewFlowInterlock(permits, valves, flowConfig, func(record discharge.TripRecord) {
+		alarmService.Raise(model.NewAlarm(record.LineID, tripAlarmCode(record.Reason),
+			tripAlarmMessage(record), model.SeverityCritical, record.TrippedAt))
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, lineID := range lines {
+		if err := flowGuard.EnableLine(lineID, now()); err != nil {
+			return nil, err
+		}
+	}
 	pumps, err := sludge.NewPumpController(pumpList)
 	if err != nil {
 		return nil, err
@@ -144,7 +158,8 @@ func NewPlant(dataDir string, lines []model.LineID, now func() time.Time) (*Plan
 		now: now, lines: make(map[model.LineID]model.LineState), batches: make(map[uuid.UUID]model.Batch),
 		lineBatches: make(map[model.LineID]uuid.UUID), store: store, snapshots: snapshots,
 		intake: intakeController, equalizers: pool, aeration: aerationController, dosing: dosingService,
-		labResults: lab.NewResults(), permits: permits, valves: valves, alarms: alarm.NewService(),
+		labResults: lab.NewResults(), permits: permits, valves: valves, flowGuard: flowGuard,
+		alarms:   alarmService,
 		settling: make(map[model.LineID]*settling.State), cycles: settling.NewCycleBook(),
 		interlocks: arbiter, drains: drains, pumps: pumps, handovers: sludge.NewHandoverBook(),
 		sequences: sequences, compensations: queue, devices: devices, sampler: sampler, receiver: receiver,

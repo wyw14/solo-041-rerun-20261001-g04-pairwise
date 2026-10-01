@@ -76,6 +76,19 @@ func (b *PermitBook) Current(batchID uuid.UUID) (Permit, bool) {
 	return permit, ok
 }
 
+// ActiveForLine reports whether the line currently holds an active permit and
+// returns it. The flow interlock re-checks this before (re-)opening a valve.
+func (b *PermitBook) ActiveForLine(lineID model.LineID) (Permit, bool) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	for _, permit := range b.byBatch {
+		if permit.LineID == lineID && permit.Active {
+			return permit, true
+		}
+	}
+	return Permit{}, false
+}
+
 func (b *PermitBook) All() []Permit {
 	b.mu.RLock()
 	defer b.mu.RUnlock()

@@ -65,6 +65,12 @@ func (c *ValveController) Hold(lineID model.LineID, now time.Time) error {
 	return nil
 }
 
+func (c *ValveController) IsOpen(lineID model.LineID) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.valves[lineID].Open
+}
+
 func (c *ValveController) Snapshot() []Valve {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
