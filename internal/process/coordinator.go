@@ -38,6 +38,7 @@ type Plant struct {
 	labResults    *lab.Results
 	permits       *discharge.PermitBook
 	valves        *discharge.ValveController
+	flowGuard     *discharge.FlowInterlock
 	alarms        *alarm.Service
 	settling      map[model.LineID]*settling.State
 	cycles        *settling.CycleBook
@@ -52,7 +53,7 @@ type Plant struct {
 	receiver      *sensor.Receiver
 }
 
-func NewPlant(dataDir string, lines []model.LineID, now func() time.Time) (*Plant, error) {
+func NewPlant(dataDir string, lines []model.LineID, now func() time.Time, flowCfg FlowInterlockConfig) (*Plant, error) {
 	if dataDir == "" || len(lines) == 0 || now == nil {
 		return nil, errors.New("plant data directory, lines and clock are required")
 	}
@@ -159,6 +160,20 @@ func NewPlant(dataDir string, lines []model.LineID, now func() time.Time) (*Plan
 		listener.Bind(state)
 		plant.settling[lineID] = state
 	}
+	flowLimits := make(map[model.LineID]float64, len(lines))
+	for _, lineID := range lines {
+		flowLimits[lineID] = flowCfg.LimitM3Hour
+	}
+	flowGuard, err := discharge.NewFlowInterlock(valves, permits, flowLimits, flowCfg.TelemetryMaxAge, now, func(record discharge.TripRecord) {
+		if record.Action != discharge.ActionTripped {
+			return
+		}
+		plant.alarms.Raise(model.NewAlarm(record.LineID, "DISCHARGE_FLOW_INTERLOCK", record.Detail, model.SeverityCritical, record.At))
+	})
+	if err != nil {
+		return nil, err
+	}
+	plant.flowGuard = flowGuard
 	if err := sampler.Subscribe(func(sample model.Sample) {
 		if sample.Kind == model.SampleSludgeBlanket {
 			_, _ = plant.UpdateBlanket(sample.LineID, sample.Value)

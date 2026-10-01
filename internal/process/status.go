@@ -23,6 +23,7 @@ type LineStatus struct {
 	Dose          *dosing.Change         `json:"dose,omitempty"`
 	LabResult     *model.LabResult       `json:"lab_result,omitempty"`
 	Permit        *discharge.Permit      `json:"permit,omitempty"`
+	FlowInterlock *discharge.LineGuardState `json:"flow_interlock,omitempty"`
 	Cycle         *settling.Cycle        `json:"cycle,omitempty"`
 	Handover      *sludge.Handover       `json:"handover,omitempty"`
 	Sequence      *sludge.Sequence       `json:"sequence,omitempty"`
@@ -84,8 +85,13 @@ func (p *Plant) Status(lineID model.LineID) (LineStatus, error) {
 	if value, found := p.sequences.Current(lineID); found {
 		sequence = &value
 	}
+	var flowInterlock *discharge.LineGuardState
+	if value, found := p.flowGuard.State(lineID); found == nil {
+		flowInterlock = &value
+	}
 	return LineStatus{
 		Line: line, Batch: batch, Intake: admission, Equalizers: p.equalizers.Snapshot(), Dose: dose, LabResult: labResult, Permit: permit,
+		FlowInterlock: flowInterlock,
 		Cycle: cycle, Handover: handover, Sequence: sequence, Settling: settlingState.Snapshot(),
 		Samples: p.sampler.LineSnapshot(lineID), SampleCursor: p.receiver.Current(lineID),
 		Compensations: p.compensations.Pending(),

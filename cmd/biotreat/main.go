@@ -32,7 +32,10 @@ func run() error {
 	}
 	clock := func() time.Time { return time.Now().UTC() }
 	lineIDs := []model.LineID{"line-1", "line-2", "line-3"}
-	plant, err := process.NewPlant(cfg.DataDir, lineIDs, clock)
+	plant, err := process.NewPlant(cfg.DataDir, lineIDs, clock, process.FlowInterlockConfig{
+		LimitM3Hour:     cfg.FlowLimitM3Hour,
+		TelemetryMaxAge: cfg.FlowTelemetryMaxAge,
+	})
 	if err != nil {
 		return err
 	}
@@ -61,6 +64,7 @@ func run() error {
 			case <-maintenanceContext.Done():
 				return
 			case <-ticker.C:
+				plant.EvaluateFlowInterlocks()
 				if _, runErr := plant.RunCompensations(maintenanceContext); runErr != nil && !errors.Is(runErr, context.Canceled) {
 					log.Printf("compensation maintenance: %v", runErr)
 				}

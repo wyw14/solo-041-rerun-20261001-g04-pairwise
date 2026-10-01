@@ -76,6 +76,24 @@ func (b *PermitBook) Current(batchID uuid.UUID) (Permit, bool) {
 	return permit, ok
 }
 
+func (b *PermitBook) ActiveForLine(lineID model.LineID) (Permit, bool) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	var found Permit
+	for _, permit := range b.byBatch {
+		if permit.LineID != lineID || !permit.Active {
+			continue
+		}
+		if !found.Active || permit.IssuedAt.After(found.IssuedAt) {
+			found = permit
+		}
+	}
+	if !found.Active {
+		return Permit{}, false
+	}
+	return found, true
+}
+
 func (b *PermitBook) All() []Permit {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
